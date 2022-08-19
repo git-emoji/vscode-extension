@@ -83,8 +83,7 @@ async function suggest() {
     }
 
     const emojis = suggestEmojiForMessage(commitMessage);
-    if (!emojis.length) {
-        vscode.window.showErrorMessage(localize('no-suggestion', 'No suggestion found'));
+    if (!emojis) {
         return;
     }
 
@@ -210,9 +209,16 @@ function suggestEmojiForMessage(message: string): Emoji[] {
     return entries.reverse().map(x => x[0]);
 }
 
-async function pickEmoji(emojis: Emoji[], allowMultiple?: boolean): Promise<Emoji[] | undefined> {
-    type Item = vscode.QuickPickItem & { emoji?: Emoji; isSelectMultiple?: true };
-    const items: Item[] = emojis.map(x => ({ label: x.s, description: x.id, emoji: x }));
+async function pickEmoji(suggestedEmojis: Emoji[], allowMultiple?: boolean): Promise<Emoji[] | undefined> {
+    type Item = EmojiListItem & { isSelectMultiple?: true };
+    const items: Item[] = [
+        ...(!suggestedEmojis.length ? [] : [
+            { label: localize('pick-emoji-suggested-emojis', "Suggested emojis"), kind: vscode.QuickPickItemKind.Separator },
+            ...suggestedEmojis.map(x => ({ label: x.s, description: x.id, emoji: x })),
+        ]),
+        { label: localize('pick-emoji-other-emojis', "Other emojis"), kind: vscode.QuickPickItemKind.Separator },
+        ...getEmojisListItems(suggestedEmojis),
+    ];
     if (!allowMultiple) {
         const selectMultiple: Item = {
             label: localize('select-multiple-emojis', "Select multiple emojis..."),
@@ -221,15 +227,17 @@ async function pickEmoji(emojis: Emoji[], allowMultiple?: boolean): Promise<Emoj
         const selected = await vscode.window.showQuickPick<Item>([selectMultiple, ...items], {
             ignoreFocusOut: true,
             matchOnDescription: true,
+            matchOnDetail: true,
         });
         return !selected
             ? undefined
-            : selected.isSelectMultiple ? await pickEmoji(emojis, true) : [selected.emoji!];
+            : selected.isSelectMultiple ? await pickEmoji(suggestedEmojis, true) : [selected.emoji!];
     } else {
         const selected = await vscode.window.showQuickPick<Item>(items, {
             canPickMany: true,
             ignoreFocusOut: true,
             matchOnDescription: true,
+            matchOnDetail: true,
         });
         return selected?.map(x => x.emoji!);
     }
@@ -327,15 +335,22 @@ async function listEmojis() {
     await emit(action, seq);
 }
 
-async function pickEmojisList(allowMultiple?: boolean): Promise<undefined | Emoji[]> {
-    type Item = vscode.QuickPickItem & { emoji?: Emoji; isSelectMultiple?: true };
-    const items = Array.from(indexed().emoji2keyword.entries()).map(([e, s]): Item => ({
+type EmojiListItem = vscode.QuickPickItem & { emoji?: Emoji; };
+
+function getEmojisListItems(except?: Emoji[]): EmojiListItem[] {
+    const result = Array.from(indexed().emoji2keyword.entries()).filter(([e]) => !except?.includes(e)).map(([e, s]): EmojiListItem => ({
         label: e.s,
         description: e.id,
         detail: sortAndJoin(s.values(), '|'),
         emoji: e,
     }));
-    items.sort((a, b) => a.emoji!.id.localeCompare(b.emoji!.id));
+    result.sort((a, b) => a.emoji!.id.localeCompare(b.emoji!.id));
+    return result;
+}
+
+async function pickEmojisList(allowMultiple?: boolean): Promise<undefined | Emoji[]> {
+    type Item = EmojiListItem & { isSelectMultiple?: true };
+    const items: Item[] = getEmojisListItems();
 
     if (!allowMultiple) {
         const selectMultiple: Item = {
