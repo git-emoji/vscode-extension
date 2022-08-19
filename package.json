@@ -1,50 +1,74 @@
 {
-  "name": "vscode-git-emoji-by-context",
-  "displayName": "Git Emoji By Context",
-  "description": "Suggests context-related emoji for git commit messages",
-  "publisher": "babakks",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/babakks/vscode-git-emoji-by-context"
-  },
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.60.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-    "onCommand:vscode-git-emoji-by-context.suggest"
-  ],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "vscode-git-emoji-by-context.suggest",
-        "title": "Git Emoji by Context: Suggest"
-      }
-    ]
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
-  },
-  "devDependencies": {
-    "@types/glob": "^7.2.0",
-    "@types/mocha": "^9.1.0",
-    "@types/node": "14.x",
-    "@types/vscode": "^1.60.0",
-    "@typescript-eslint/eslint-plugin": "^5.16.0",
-    "@typescript-eslint/parser": "^5.16.0",
-    "@vscode/test-electron": "^2.1.3",
-    "eslint": "^8.11.0",
-    "glob": "^7.2.0",
-    "mocha": "^9.2.2",
-    "typescript": "^4.5.5"
-  }
+    "name": "vscode-git-emoji",
+    "displayName": "Git-Emoji",
+    "description": "Suggest context-related emoji for git commit messages",
+    "publisher": "git-emoji",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/git-emoji/vscode-extension"
+    },
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.60.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onCommand:vscode-git-emoji.suggest",
+        "onCommand:vscode-git-emoji.list-emojis"
+    ],
+    "main": "./out/extension.js",
+    "icon": "images/icon.png",
+    "keywords": [
+        "git",
+        "commit",
+        "emoji",
+        "smiley",
+        "emoticon",
+        "git-emoji",
+        "context",
+        "terminal",
+        "dataset"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "vscode-git-emoji.suggest",
+                "title": "Git-Emoji: Suggest",
+                "icon": "$(lightbulb)"
+            },
+            {
+                "command": "vscode-git-emoji.list-emojis",
+                "title": "Git-Emoji: List Emojis",
+                "icon": "$(list-flat)"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "test": "node ./out/test/runTest.js"
+    },
+    "devDependencies": {
+        "@types/glob": "^7.2.0",
+        "@types/mocha": "^9.1.0",
+        "@types/node": "14.x",
+        "@types/vscode": "^1.60.0",
+        "@typescript-eslint/eslint-plugin": "^5.16.0",
+        "@typescript-eslint/parser": "^5.16.0",
+        "@vscode/test-electron": "^2.1.3",
+        "eslint": "^8.11.0",
+        "glob": "^7.2.0",
+        "mocha": "^9.2.2",
+        "typescript": "^4.5.5",
+        "vscode-nls-dev": "^4.0.1"
+    },
+    "dependencies": {
+        "@git-emoji/dataset-js": "^0.0.3",
+        "vscode-nls": "^5.1.0"
+    }
 }
