@@ -220,6 +220,7 @@ async function pickEmoji(emojis: Emoji[], allowMultiple?: boolean): Promise<Emoj
         };
         const selected = await vscode.window.showQuickPick<Item>([selectMultiple, ...items], {
             ignoreFocusOut: true,
+            matchOnDescription: true,
         });
         return !selected
             ? undefined
@@ -228,6 +229,7 @@ async function pickEmoji(emojis: Emoji[], allowMultiple?: boolean): Promise<Emoj
         const selected = await vscode.window.showQuickPick<Item>(items, {
             canPickMany: true,
             ignoreFocusOut: true,
+            matchOnDescription: true,
         });
         return selected?.map(x => x.emoji!);
     }
