@@ -171,7 +171,7 @@ async function pickEmoji(suggestedEmojis: Emoji[], allowMultiple?: boolean): Pro
             ...suggestedEmojis.map(x => ({ label: x.s, description: x.id, emoji: x })),
         ]),
         { label: localize('pick-emoji-other-emojis', "Other emojis"), kind: vscode.QuickPickItemKind.Separator },
-        ...getEmojisListItems(suggestedEmojis),
+        ...getEmojisListItems([]), /* Show all emojis, even the already suggested ones */
     ];
     if (!allowMultiple) {
         const selectMultiple: Item = {
