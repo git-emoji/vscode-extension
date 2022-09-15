@@ -7,6 +7,7 @@ import { indexed, Emoji } from './dataset';
 const localize = nls.config()();
 
 const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
+const _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS = 250;
 
 export function activate(context: vscode.ExtensionContext) {
     const disposables = [
@@ -97,48 +98,57 @@ function emitToCommitMessageInputBox(text: string) {
 }
 
 async function readCommitMessage(seed?: string): Promise<string | undefined> {
+    const MAX = _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT;
     return new Promise(resolve => {
         const box = vscode.window.createInputBox();
         const suggestOnValue = (value: string) => {
             const emojis = suggestEmojiForMessage(value);
-            if (!emojis.length) {
-                box.title = '';
-                return;
-            }
-            box.title = emojis.slice(0, _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT).map(x => x.s).join('')
-                + (emojis.length <= _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT ? '' : ' ' + localize('plus_more_emojis', "+{0}", emojis.length - _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT));
+            return emojis.length
+                ? emojis.slice(0, MAX).map(x => x.s).join('') + (emojis.length <= MAX ? '' : ' ' + localize('plus_more_emojis', "+{0}", emojis.length - MAX))
+                : '';
         };
-        box.onDidChangeValue(e => suggestOnValue(e));
+        const intervalId = setInterval(() => {
+            const value = box.value;
+            if (!value) { return; };
+            box.title = suggestOnValue(value);
+        }, _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS);
+        const dispose = () => {
+            clearInterval(intervalId);
+            box.dispose();
+        };
+        let accepted = false;
         box.onDidAccept(e => {
             if (!box.value) {
                 return;
             }
+            accepted = true;
             const result = box.value;
-            box.dispose();
+            dispose();
             resolve(result);
         });
         box.onDidHide(e => {
-            if (box.value) {
+            if (accepted) {
                 return;
             }
-            box.dispose();
+            dispose();
             resolve(undefined);
         });
         box.ignoreFocusOut = true;
         if (seed) {
             box.value = seed;
-            suggestOnValue(box.value);
+            box.title = suggestOnValue(box.value);
         }
         box.show();
     });
 }
 
 function suggestEmojiForMessage(message: string): Emoji[] {
-    const words = message.split(/\b(\w+)\b/g).map(x => x.trim()).filter(x => x.length > 0);
     const usage = new Map<Emoji, number>();
-    for (const w of words) {
-        const normalized = normalizeWord(w);
-        const emojis = indexed().keyword2emoji.get(normalized)?.values() || [];
+    const normalizedMessage = message.toLowerCase();
+    for (const [keyword, emojis] of indexed().keyword2emoji.entries()) {
+        if (-1 === normalizedMessage.indexOf(keyword)) {
+            continue;
+        }
         for (const e of emojis) {
             if (usage.has(e)) {
                 usage.set(e, 1 + usage.get(e)!);
@@ -147,6 +157,7 @@ function suggestEmojiForMessage(message: string): Emoji[] {
             }
         }
     }
+
     const entries = Array.from(usage.entries());
     entries.sort((a, b) => a[1] - b[1]);
     return entries.reverse().map(x => x[0]);
