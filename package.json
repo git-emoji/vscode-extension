@@ -72,7 +72,7 @@
         "vscode-nls-dev": "^4.0.1"
     },
     "dependencies": {
-        "@git-emoji/dataset-js": "^0.0.4",
+        "@git-emoji/dataset-js": "^0.0.5",
         "vscode-nls": "^5.1.0"
     }
 }
