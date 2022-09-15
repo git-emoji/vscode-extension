@@ -3,11 +3,15 @@ import * as vscode from 'vscode';
 
 import { GitExtension } from './git';
 import { indexed, Emoji } from './dataset';
+import { normalizeWord } from './util';
 
 const localize = nls.config()();
 
 const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
 const _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS = 250;
+
+const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD = 10;
+const _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD = 1;
 
 export function activate(context: vscode.ExtensionContext) {
     const disposables = [
@@ -144,18 +148,26 @@ async function readCommitMessage(seed?: string): Promise<string | undefined> {
 
 function suggestEmojiForMessage(message: string): Emoji[] {
     const usage = new Map<Emoji, number>();
+    const increment = (e: Emoji, value: number) => {
+        if (!usage.has(e)) {
+            usage.set(e, 0);
+        }
+        usage.set(e, value + usage.get(e)!);
+    };
+
+    // Whole-word matching
+    const words = message.split(/\b(\w+)\b/g).map(x => x.trim()).filter(x => x.length > 0);
+    for (const w of words) {
+        const normalized = normalizeWord(w);
+        const emojis = indexed().keyword2emoji.get(normalized)?.values() || [];
+        for (const e of emojis) { increment(e, _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD); }
+    }
+
+    // Sub-word (i.e., any) matching
     const normalizedMessage = message.toLowerCase();
     for (const [keyword, emojis] of indexed().keyword2emoji.entries()) {
-        if (-1 === normalizedMessage.indexOf(keyword)) {
-            continue;
-        }
-        for (const e of emojis) {
-            if (usage.has(e)) {
-                usage.set(e, 1 + usage.get(e)!);
-            } else {
-                usage.set(e, 1);
-            }
-        }
+        if (-1 === normalizedMessage.indexOf(keyword)) { continue; }
+        for (const e of emojis) { increment(e, _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD); }
     }
 
     const entries = Array.from(usage.entries());
