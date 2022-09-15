@@ -25,7 +25,8 @@ function makeIndexed(): IndexedDataset {
     }
 
     for (const ctx of dataset.context) {
-        for (const keyword of ctx.keyword) {
+        const enhancedKeywords = getEnhanceKeywordsOfContextEntry(ctx);
+        for (const keyword of enhancedKeywords) {
             const normalized = normalizeWord(keyword);
             if (!keyword2emoji.has(normalized)) {
                 keyword2emoji.set(normalized, new Set<Emoji>());
@@ -37,21 +38,32 @@ function makeIndexed(): IndexedDataset {
         }
         for (const emoji of ctx.emoji) {
             const s = emoji2keyword.get(emoji)!;
-            for (const keyword of ctx.keyword) {
+            for (const keyword of enhancedKeywords) {
                 s.add(normalizeWord(keyword));
             }
         }
     }
 
-    for (const key of Object.keys(dataset.emoji)) {
-        const emoji = dataset.emoji[key as keyof typeof dataset.emoji];
-        const normalized = normalizeWord(emoji.id);
-        emoji2keyword.get(emoji)!.add(normalized);
-        if (!keyword2emoji.has(normalized)) {
-            keyword2emoji.set(normalized, new Set());
+    return { keyword2emoji, emoji2keyword };
+}
+
+function getEnhanceKeywordsOfContextEntry(ctx: { keyword: string[]; emoji: { id: string; s: string; }[] }): string[] {
+    const result = new Set<string>();
+
+    // Adding similar words
+    for (const keyword of ctx.keyword) {
+        result.add(keyword);
+        const data = (dataset.word as any)[keyword];
+        if (data?.cover) {
+            data.cover.forEach((x: string) => result.add(x));
         }
-        keyword2emoji.get(normalized)!.add(emoji);
     }
 
-    return { keyword2emoji, emoji2keyword };
+    // Adding emoji ids
+    for (const emoji of ctx.emoji) {
+        const normalized = normalizeWord(emoji.id);
+        result.add(normalized);
+    }
+
+    return Array.from(result);
 }
