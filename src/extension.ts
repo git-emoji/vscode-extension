@@ -1,11 +1,17 @@
 import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
-import * as dataset from '@git-emoji/dataset-js';
+
 import { GitExtension } from './git';
+import { indexed, Emoji } from './dataset';
+import { normalizeWord } from './util';
 
 const localize = nls.config()();
 
 const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
+const _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS = 250;
+
+const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD = 10;
+const _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD = 1;
 
 export function activate(context: vscode.ExtensionContext) {
     const disposables = [
@@ -16,64 +22,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() { }
-
-type Emoji = (typeof dataset.emoji)['_1234'];
-
-interface IndexedDataset {
-    keyword2emoji: Map<string, Set<Emoji>>;
-    emoji2keyword: Map<Emoji, Set<string>>;
-}
-
-let _indexed: IndexedDataset | undefined = undefined;
-
-function indexed() {
-    return _indexed || (_indexed = makeIndexed());
-}
-
-function makeIndexed(): IndexedDataset {
-    const keyword2emoji = new Map<string, Set<Emoji>>();
-    const emoji2keyword = new Map<Emoji, Set<string>>();
-
-    for (const key of Object.keys(dataset.emoji)) {
-        const emoji = dataset.emoji[key as keyof typeof dataset.emoji];
-        emoji2keyword.set(emoji, new Set<string>());
-    }
-
-    for (const ctx of dataset.context) {
-        for (const keyword of ctx.keyword) {
-            const normalized = normalizeWord(keyword);
-            if (!keyword2emoji.has(normalized)) {
-                keyword2emoji.set(normalized, new Set<Emoji>());
-            }
-            const s = keyword2emoji.get(normalized)!;
-            for (const emoji of ctx.emoji) {
-                s.add(emoji);
-            }
-        }
-        for (const emoji of ctx.emoji) {
-            const s = emoji2keyword.get(emoji)!;
-            for (const keyword of ctx.keyword) {
-                s.add(normalizeWord(keyword));
-            }
-        }
-    }
-
-    for (const key of Object.keys(dataset.emoji)) {
-        const emoji = dataset.emoji[key as keyof typeof dataset.emoji];
-        const normalized = normalizeWord(emoji.id);
-        emoji2keyword.get(emoji)!.add(normalized);
-        if (!keyword2emoji.has(normalized)) {
-            keyword2emoji.set(normalized, new Set());
-        }
-        keyword2emoji.get(normalized)!.add(emoji);
-    }
-
-    return { keyword2emoji, emoji2keyword };
-}
-
-function normalizeWord(word: string) {
-    return word.trim().toLowerCase();
-}
 
 async function suggest() {
     const seed = readActiveTextEditorSelection() || readCommitMessageInputBox();
@@ -154,56 +102,74 @@ function emitToCommitMessageInputBox(text: string) {
 }
 
 async function readCommitMessage(seed?: string): Promise<string | undefined> {
+    const MAX = _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT;
     return new Promise(resolve => {
         const box = vscode.window.createInputBox();
         const suggestOnValue = (value: string) => {
             const emojis = suggestEmojiForMessage(value);
-            if (!emojis.length) {
-                box.title = '';
-                return;
-            }
-            box.title = emojis.slice(0, _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT).map(x => x.s).join('')
-                + (emojis.length <= _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT ? '' : ' ' + localize('plus_more_emojis', "+{0}", emojis.length - _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT));
+            return emojis.length
+                ? emojis.slice(0, MAX).map(x => x.s).join('') + (emojis.length <= MAX ? '' : ' ' + localize('plus_more_emojis', "+{0}", emojis.length - MAX))
+                : '';
         };
-        box.onDidChangeValue(e => suggestOnValue(e));
+        const intervalId = setInterval(() => {
+            const value = box.value;
+            if (!value) { return; };
+            box.title = suggestOnValue(value);
+        }, _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS);
+        const dispose = () => {
+            clearInterval(intervalId);
+            box.dispose();
+        };
+        let accepted = false;
         box.onDidAccept(e => {
             if (!box.value) {
                 return;
             }
+            accepted = true;
             const result = box.value;
-            box.dispose();
+            dispose();
             resolve(result);
         });
         box.onDidHide(e => {
-            if (box.value) {
+            if (accepted) {
                 return;
             }
-            box.dispose();
+            dispose();
             resolve(undefined);
         });
         box.ignoreFocusOut = true;
         if (seed) {
             box.value = seed;
-            suggestOnValue(box.value);
+            box.title = suggestOnValue(box.value);
         }
         box.show();
     });
 }
 
 function suggestEmojiForMessage(message: string): Emoji[] {
-    const words = message.split(/\b(\w+)\b/g).map(x => x.trim()).filter(x => x.length > 0);
     const usage = new Map<Emoji, number>();
+    const increment = (e: Emoji, value: number) => {
+        if (!usage.has(e)) {
+            usage.set(e, 0);
+        }
+        usage.set(e, value + usage.get(e)!);
+    };
+
+    // Whole-word matching
+    const words = message.split(/\b(\w+)\b/g).map(x => x.trim()).filter(x => x.length > 0);
     for (const w of words) {
         const normalized = normalizeWord(w);
         const emojis = indexed().keyword2emoji.get(normalized)?.values() || [];
-        for (const e of emojis) {
-            if (usage.has(e)) {
-                usage.set(e, 1 + usage.get(e)!);
-            } else {
-                usage.set(e, 1);
-            }
-        }
+        for (const e of emojis) { increment(e, _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD); }
     }
+
+    // Sub-word (i.e., any) matching
+    const normalizedMessage = message.toLowerCase();
+    for (const [keyword, emojis] of indexed().keyword2emoji.entries()) {
+        if (-1 === normalizedMessage.indexOf(keyword)) { continue; }
+        for (const e of emojis) { increment(e, _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD); }
+    }
+
     const entries = Array.from(usage.entries());
     entries.sort((a, b) => a[1] - b[1]);
     return entries.reverse().map(x => x[0]);
@@ -217,7 +183,7 @@ async function pickEmoji(suggestedEmojis: Emoji[], allowMultiple?: boolean): Pro
             ...suggestedEmojis.map(x => ({ label: x.s, description: x.id, emoji: x })),
         ]),
         { label: localize('pick-emoji-other-emojis', "Other emojis"), kind: vscode.QuickPickItemKind.Separator },
-        ...getEmojisListItems(suggestedEmojis),
+        ...getEmojisListItems([]), /* Show all emojis, even the already suggested ones */
     ];
     if (!allowMultiple) {
         const selectMultiple: Item = {

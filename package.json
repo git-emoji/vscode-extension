@@ -7,12 +7,15 @@
         "type": "git",
         "url": "https://github.com/git-emoji/vscode-extension"
     },
-    "version": "0.0.4",
+    "version": "0.0.5",
     "engines": {
         "vscode": "^1.64.0"
     },
     "categories": [
         "Other"
+    ],
+    "extensionDependencies": [
+        "vscode.git"
     ],
     "activationEvents": [
         "onCommand:vscode-git-emoji.suggest",
@@ -51,7 +54,8 @@
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile && npm run lint",
         "lint": "eslint src --ext ts",
-        "test": "node ./out/test/runTest.js"
+        "test": "node ./out/test/runTest.js",
+        "test-local": "node_modules/mocha/bin/mocha --ui tdd out/test/local/**/*.test.js"
     },
     "devDependencies": {
         "@types/glob": "^7.2.0",
@@ -68,7 +72,7 @@
         "vscode-nls-dev": "^4.0.1"
     },
     "dependencies": {
-        "@git-emoji/dataset-js": "^0.0.4",
+        "@git-emoji/dataset-js": "^0.0.5",
         "vscode-nls": "^5.1.0"
     }
 }
