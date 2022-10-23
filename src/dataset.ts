@@ -3,10 +3,12 @@ import * as dataset from '@git-emoji/dataset-js';
 import { normalizeWord } from './util';
 
 export type Emoji = (typeof dataset.emoji)['_1234'];
+export type WordTag = dataset.WordTag;
 
 interface IndexedDataset {
     keyword2emoji: Map<string, Set<Emoji>>;
     emoji2keyword: Map<Emoji, Set<string>>;
+    keyword2tag: Map<string, Set<dataset.WordTag>>;
 }
 
 let _indexed: IndexedDataset | undefined = undefined;
@@ -44,7 +46,20 @@ function makeIndexed(): IndexedDataset {
         }
     }
 
-    return { keyword2emoji, emoji2keyword };
+    const keyword2tag = new Map<string, Set<dataset.WordTag>>();
+    for (const k in dataset.word) {
+        const w = dataset.word[k as keyof typeof dataset.word] as dataset.WordEntry;
+        for (const x of [k, ...w.cover]) {
+            if (!keyword2tag.has(x)) {
+                keyword2tag.set(x, new Set<dataset.WordTag>());
+            }
+            for (const t of w.tag) {
+                keyword2tag.get(x)!.add(t);
+            }
+        }
+    }
+
+    return { keyword2emoji, emoji2keyword, keyword2tag };
 }
 
 function getEnhanceKeywordsOfContextEntry(ctx: { keyword: string[]; emoji: { id: string; s: string; }[] }): string[] {
