@@ -2,7 +2,7 @@ import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
 
 import { GitExtension } from './git';
-import { indexed, Emoji } from './dataset';
+import { indexed, Emoji, WordTag } from './dataset';
 import { normalizeWord } from './util';
 
 const localize = nls.config()();
@@ -10,7 +10,13 @@ const localize = nls.config()();
 const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
 const _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS = 250;
 
-const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD = 10;
+const [_VERB, _ACRONYM]: WordTag[] = ['verb', 'acronym'];
+const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_DEFAULT = 5;
+const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG = {
+    [_VERB]: 10,
+    [_ACRONYM]: 20,
+};
+
 const _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD = 1;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -160,7 +166,15 @@ function suggestEmojiForMessage(message: string): Emoji[] {
     for (const w of words) {
         const normalized = normalizeWord(w);
         const emojis = indexed().keyword2emoji.get(normalized)?.values() || [];
-        for (const e of emojis) { increment(e, _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD); }
+
+        let weight = 0;
+        for (const t of indexed().keyword2tag.get(normalized) || []) {
+            weight += _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG[t] || 0;
+        }
+
+        for (const e of emojis) {
+            increment(e, weight || _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_DEFAULT);
+        }
     }
 
     // Sub-word (i.e., any) matching
