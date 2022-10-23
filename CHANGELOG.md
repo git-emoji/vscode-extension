@@ -1,6 +1,6 @@
 # Change Log
 
-## Next
+## 0.0.6
 
 - Prioritize emojis based on keyword tags (verbs/acronyms)
 - Seed suggest command with last incomplete commit message
