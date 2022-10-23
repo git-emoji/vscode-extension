@@ -29,12 +29,16 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() { }
 
+let _lastIncompleteMessage: string | undefined = undefined;
+
 async function suggest() {
-    const seed = readActiveTextEditorSelection() || readCommitMessageInputBox();
+    const seed = _lastIncompleteMessage || readActiveTextEditorSelection() || readCommitMessageInputBox();
     const commitMessage = await readCommitMessage(seed);
     if (!commitMessage) {
         return;
     }
+
+    _lastIncompleteMessage = commitMessage;
 
     const emojis = suggestEmojiForMessage(commitMessage);
     if (!emojis) {
@@ -58,6 +62,8 @@ async function suggest() {
     }
 
     await emit(action, combined);
+
+    _lastIncompleteMessage = undefined;
 }
 
 async function emit(action: EmitAction, value: string) {
