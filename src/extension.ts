@@ -326,7 +326,7 @@ type EmojiListItem = vscode.QuickPickItem & { emoji?: Emoji; };
 function getEmojisListItems(except?: Emoji[]): EmojiListItem[] {
     const result = Array.from(indexed().emoji2keyword.entries()).filter(([e]) => !except?.includes(e)).map(([e, s]): EmojiListItem => ({
         label: e.s,
-        description: e.id,
+        description: `:${e.id}:`,
         detail: sortAndJoin(s.values(), '|'),
         emoji: e,
     }));
