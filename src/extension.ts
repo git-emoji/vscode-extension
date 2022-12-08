@@ -126,7 +126,10 @@ async function readCommitMessage(seed?: string): Promise<string | undefined> {
         const intervalId = setInterval(() => {
             const value = box.value;
             if (!value) { return; };
-            box.title = suggestOnValue(value);
+            const newTitle = suggestOnValue(value);
+            if (newTitle !== box.title) {
+                box.title = newTitle;
+            }
         }, _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS);
         const dispose = () => {
             clearInterval(intervalId);
