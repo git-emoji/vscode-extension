@@ -1,5 +1,9 @@
 # Change Log
 
+## Next
+
+- Improve emoji picker
+
 ## 0.0.6
 
 - Prioritize emojis based on keyword tags (verbs/acronyms)
