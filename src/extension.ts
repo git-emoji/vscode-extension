@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { GitExtension } from './git';
 import { indexed, Emoji, WordTag } from './dataset';
 import { normalizeWord } from './util';
+import { current, sync } from './config';
 
 const localize = nls.config()();
 
@@ -20,9 +21,15 @@ const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG = {
 const _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD = 1;
 
 export function activate(context: vscode.ExtensionContext) {
+    sync();
     const disposables = [
         vscode.commands.registerCommand('vscode-git-emoji.suggest', () => suggest()),
         vscode.commands.registerCommand('vscode-git-emoji.list-emojis', () => listEmojis()),
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('vscode-git-emoji')) {
+                sync();
+            }
+        }),
     ];
     context.subscriptions.push(...disposables);
 }
