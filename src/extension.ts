@@ -126,7 +126,10 @@ async function readCommitMessage(seed?: string): Promise<string | undefined> {
         const intervalId = setInterval(() => {
             const value = box.value;
             if (!value) { return; };
-            box.title = suggestOnValue(value);
+            const newTitle = suggestOnValue(value);
+            if (newTitle !== box.title) {
+                box.title = newTitle;
+            }
         }, _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS);
         const dispose = () => {
             clearInterval(intervalId);
@@ -326,7 +329,7 @@ type EmojiListItem = vscode.QuickPickItem & { emoji?: Emoji; };
 function getEmojisListItems(except?: Emoji[]): EmojiListItem[] {
     const result = Array.from(indexed().emoji2keyword.entries()).filter(([e]) => !except?.includes(e)).map(([e, s]): EmojiListItem => ({
         label: e.s,
-        description: e.id,
+        description: `:${e.id}:`,
         detail: sortAndJoin(s.values(), '|'),
         emoji: e,
     }));
