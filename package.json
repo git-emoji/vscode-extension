@@ -46,6 +46,25 @@
                 "title": "Git-Emoji: List Emojis",
                 "icon": "$(list-flat)"
             }
+        ],
+        "configuration": [
+            {
+                "title": "Git-Emoji",
+                "properties": {
+                    "vscode-git-emoji.contextualDataVersion": {
+                        "enum": [
+                            "v1",
+                            "v2"
+                        ],
+                        "enumDescriptions": [
+                            "v1: Generic and general-purpose",
+                            "v2: To-the-point and focused"
+                        ],
+                        "default": "v2",
+                        "markdownDescription": "Contextual data version (See [`@git-emoji/dataset-js`](https://www.npmjs.com/package/@git-emoji/dataset-js) package documentations)"
+                    }
+                }
+            }
         ]
     },
     "scripts": {
@@ -72,7 +91,7 @@
         "vscode-nls-dev": "^4.0.1"
     },
     "dependencies": {
-        "@git-emoji/dataset-js": "^0.0.6",
+        "@git-emoji/dataset-js": "^0.0.7",
         "vscode-nls": "^5.1.0"
     }
 }

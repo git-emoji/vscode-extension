@@ -21,6 +21,10 @@ Just:
 1. Search for your keyword or contextual data
 1. Receive selected emojis 📋
 
+## Changing the underlying dataset version
+
+You can tell the extension which contextual dataset version to use. For this, you need to go the settings and find the "Contextual data version" configuration property. Learn more about the dataset versions at the dataset's [docs][git-emoji-dataset].
+
 ## Thank you
 
 Love to see your contributions! 🍏

@@ -3,6 +3,7 @@
 ## Next
 
 - Improve emoji picker
+- Incorporate new contextual data v2
 
 ## 0.0.6
 

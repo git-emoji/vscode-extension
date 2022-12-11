@@ -2,32 +2,44 @@ import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
 
 import { GitExtension } from './git';
-import { indexed, Emoji, WordTag } from './dataset';
+import { indexedV1, indexedV2, Emoji, WordTag } from './dataset';
 import { normalizeWord } from './util';
+import { current, sync } from './config';
 
 const localize = nls.config()();
 
 const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
 const _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS = 250;
 
-const [_VERB, _ACRONYM]: WordTag[] = ['verb', 'acronym'];
+const [_VERB, _ACRONYM, _ABBR]: WordTag[] = ['verb', 'acronym', 'abbreviation'];
 const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_DEFAULT = 5;
 const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG = {
     [_VERB]: 10,
     [_ACRONYM]: 20,
+    [_ABBR]: 20,
 };
 
 const _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD = 1;
 
 export function activate(context: vscode.ExtensionContext) {
+    sync();
     const disposables = [
         vscode.commands.registerCommand('vscode-git-emoji.suggest', () => suggest()),
         vscode.commands.registerCommand('vscode-git-emoji.list-emojis', () => listEmojis()),
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('vscode-git-emoji')) {
+                sync();
+            }
+        }),
     ];
     context.subscriptions.push(...disposables);
 }
 
 export function deactivate() { }
+
+function getIndexedDataset() {
+    return current().contextualDataVersion === "v1" ? indexedV1() : indexedV2();
+}
 
 let _lastIncompleteMessage: string | undefined = undefined;
 
@@ -174,10 +186,10 @@ function suggestEmojiForMessage(message: string): Emoji[] {
     const words = message.split(/\b(\w+)\b/g).map(x => x.trim()).filter(x => x.length > 0);
     for (const w of words) {
         const normalized = normalizeWord(w);
-        const emojis = indexed().keyword2emoji.get(normalized)?.values() || [];
+        const emojis = getIndexedDataset().keyword2emoji.get(normalized)?.values() || [];
 
         let weight = 0;
-        for (const t of indexed().keyword2tag.get(normalized) || []) {
+        for (const t of getIndexedDataset().keyword2tag.get(normalized) || []) {
             weight += _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG[t] || 0;
         }
 
@@ -188,7 +200,7 @@ function suggestEmojiForMessage(message: string): Emoji[] {
 
     // Sub-word (i.e., any) matching
     const normalizedMessage = message.toLowerCase();
-    for (const [keyword, emojis] of indexed().keyword2emoji.entries()) {
+    for (const [keyword, emojis] of getIndexedDataset().keyword2emoji.entries()) {
         if (-1 === normalizedMessage.indexOf(keyword)) { continue; }
         for (const e of emojis) { increment(e, _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD); }
     }
@@ -327,7 +339,7 @@ async function listEmojis() {
 type EmojiListItem = vscode.QuickPickItem & { emoji?: Emoji; };
 
 function getEmojisListItems(except?: Emoji[]): EmojiListItem[] {
-    const result = Array.from(indexed().emoji2keyword.entries()).filter(([e]) => !except?.includes(e)).map(([e, s]): EmojiListItem => ({
+    const result = Array.from(getIndexedDataset().emoji2keyword.entries()).filter(([e]) => !except?.includes(e)).map(([e, s]): EmojiListItem => ({
         label: e.s,
         description: `:${e.id}:`,
         detail: sortAndJoin(s.values(), '|'),
