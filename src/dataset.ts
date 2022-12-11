@@ -11,13 +11,18 @@ interface IndexedDataset {
     keyword2tag: Map<string, Set<dataset.WordTag>>;
 }
 
-let _indexed: IndexedDataset | undefined = undefined;
+let _indexedV1: IndexedDataset | undefined = undefined;
+let _indexedV2: IndexedDataset | undefined = undefined;
 
-export function indexed() {
-    return _indexed || (_indexed = makeIndexed());
+export function indexedV1() {
+    return _indexedV1 || (_indexedV1 = makeIndexed('v1'));
 }
 
-function makeIndexed(): IndexedDataset {
+export function indexedV2() {
+    return _indexedV2 || (_indexedV2 = makeIndexed('v2'));
+}
+
+function makeIndexed(contextVersion: 'v1' | 'v2'): IndexedDataset {
     const keyword2emoji = new Map<string, Set<Emoji>>();
     const emoji2keyword = new Map<Emoji, Set<string>>();
 
@@ -26,7 +31,9 @@ function makeIndexed(): IndexedDataset {
         emoji2keyword.set(emoji, new Set<string>());
     }
 
-    for (const ctx of dataset.context) {
+    const context = contextVersion === 'v1' ? dataset.contextV1 : dataset.contextV2;
+
+    for (const ctx of context) {
         const enhancedKeywords = getEnhanceKeywordsOfContextEntry(ctx);
         for (const keyword of enhancedKeywords) {
             const normalized = normalizeWord(keyword);
