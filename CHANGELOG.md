@@ -1,6 +1,6 @@
 # Change Log
 
-## Next
+## 0.0.7
 
 - Improve emoji picker
 - Incorporate new contextual data v2
