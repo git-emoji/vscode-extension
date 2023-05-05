@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 
 import { GitExtension } from './git';
 import { indexedV1, indexedV2, Emoji, WordTag } from './dataset';
-import { normalizeWord } from './util';
+import { getFirstWhitespaceAfterFirstWord, normalizeWord } from './util';
 import { current, sync } from './config';
 
 const localize = nls.config()();
@@ -12,6 +12,7 @@ const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
 const _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS = 250;
 
 const [_VERB, _ACRONYM, _ABBR]: WordTag[] = ['verb', 'acronym', 'abbreviation'];
+const _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD = 1;
 const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_DEFAULT = 5;
 const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG = {
     [_VERB]: 10,
@@ -19,7 +20,8 @@ const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG = {
     [_ABBR]: 20,
 };
 
-const _SUGGESTION_PREVIEW_WEIGHT_SUB_WORD = 1;
+const _EMOJI_IN_MESSAGE_BOUNDARIES_REGEX = /^\s*\p{Extended_Pictographic}|\p{Extended_Pictographic}\s*$/ugm;
+const _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS = 10;
 
 export function activate(context: vscode.ExtensionContext) {
     sync();
@@ -33,9 +35,45 @@ export function activate(context: vscode.ExtensionContext) {
         }),
     ];
     context.subscriptions.push(...disposables);
+
+    const scmInputDiagnostics = vscode.languages.createDiagnosticCollection('git-emoji:scminput');
+    const scmInputCodeActionProvider = new SCMInputCodeActionProvider(scmInputDiagnostics);
+    context.subscriptions.push(
+        scmInputDiagnostics,
+        vscode.languages.registerCodeActionsProvider('scminput', scmInputCodeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
+    );
+
+    // const provider = new DummyCompletionItemProvider();
+    // let alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    // const characters = ('0123456789~!@#$%^&*()-_=+{}[]\|\'";:,<.>/?' + alphabet.toLowerCase() + alphabet.toUpperCase()).split('');
+    // context.subscriptions.push(vscode.languages.registerCompletionItemProvider('scminput', provider, ' ', ...characters));
+
 }
 
 export function deactivate() { }
+
+class DummyCompletionItemProvider implements vscode.CompletionItemProvider<vscode.CompletionItem> {
+    provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): vscode.ProviderResult<vscode.CompletionList<vscode.CompletionItem> | vscode.CompletionItem[]> {
+        const text = document.getText();
+        if (!text.trim().length || _EMOJI_IN_MESSAGE_BOUNDARIES_REGEX.test(text)) {
+            return;
+        }
+        const result = new vscode.CompletionItem(
+            {
+                label: 'Missing emoji',
+                description: 'Missing emoji description',
+                detail: 'Missing emoji detail',
+            },
+            vscode.CompletionItemKind.Text,
+        );
+        result.range = new vscode.Range(0, 0, 0, 2);
+        //throw new Error('Method not implemented.');
+        return [result];
+    }
+    resolveCompletionItem?(item: vscode.CompletionItem, token: vscode.CancellationToken): vscode.ProviderResult<vscode.CompletionItem> {
+        throw new Error('Method not implemented.');
+    }
+}
 
 function getIndexedDataset() {
     return current().contextualDataVersion === "v1" ? indexedV1() : indexedV2();
@@ -43,9 +81,9 @@ function getIndexedDataset() {
 
 let _lastIncompleteMessage: string | undefined = undefined;
 
-async function suggest() {
-    const seed = _lastIncompleteMessage || readActiveTextEditorSelection() || readCommitMessageInputBox();
-    const commitMessage = await readCommitMessage(seed);
+async function suggest(overrideSeed?: string | undefined, skipUserInput?: boolean | undefined, overrideEmit?: EmitAction | undefined) {
+    const seed = overrideSeed !== undefined ? overrideSeed : _lastIncompleteMessage || readActiveTextEditorSelection() || readCommitMessageInputBox();
+    const commitMessage = skipUserInput ? seed : await readCommitMessage(seed);
     if (!commitMessage) {
         return;
     }
@@ -53,10 +91,6 @@ async function suggest() {
     _lastIncompleteMessage = commitMessage;
 
     const emojis = suggestEmojiForMessage(commitMessage);
-    if (!emojis) {
-        return;
-    }
-
     const selected = await pickEmoji(emojis);
     if (!selected || !selected.length) {
         vscode.window.showErrorMessage(localize('no-emoji-selected', 'No emoji selected'));
@@ -68,7 +102,7 @@ async function suggest() {
         return;
     }
 
-    const action = await pickEmitAction();
+    const action = overrideEmit ? overrideEmit : await pickEmitAction();
     if (!action) {
         return;
     }
@@ -90,8 +124,14 @@ async function emit(action: EmitAction, value: string) {
             await emitToNewDocument(value);
             break;
         case 'copy':
-        default:
             emitToClipboard(value);
+            break;
+        default:
+            if (typeof action !== 'function') {
+                emitToClipboard(value);
+                break;
+            }
+            action(value);
             break;
     }
 }
@@ -272,7 +312,7 @@ async function pickConcatStyle(emojis: Emoji[], message: string): Promise<string
     ))?.detail;
 }
 
-type EmitAction = 'copy' | 'type-in-terminal' | 'type-in-git-input-box' | 'type-in-new-document';
+type EmitAction = 'copy' | 'type-in-terminal' | 'type-in-git-input-box' | 'type-in-new-document' | ((message: string) => void);
 
 function concatEmojis(emojis: Emoji[]) {
     return emojis.map(x => x.s).join('');
@@ -381,4 +421,80 @@ function sortAndJoin(values: string[] | Iterable<string>, separator?: string) {
     const v = Array.from(values);
     v.sort();
     return v.join(separator);
+}
+
+class PickEmojiQuickFix extends vscode.CodeAction {
+    constructor(readonly document: vscode.TextDocument, title: string) {
+        super(title, vscode.CodeActionKind.QuickFix);
+    }
+}
+
+class SCMInputCodeActionProvider implements vscode.CodeActionProvider<vscode.CodeAction> {
+    private _map = new WeakMap<vscode.Uri, { text: string; actions: ReturnType<SCMInputCodeActionProvider['_provideCodeActions']> }>();
+
+    constructor(private readonly diagnostics: vscode.DiagnosticCollection) { }
+
+    async provideCodeActions(document: vscode.TextDocument, range: vscode.Selection | vscode.Range, context: vscode.CodeActionContext, token: vscode.CancellationToken): Promise<vscode.CodeAction[]> {
+        const text = document.getText();
+        const lastOp = this._map.get(document.uri);
+        if (lastOp?.text === text) {
+            return lastOp.actions;
+        }
+
+        return new Promise(resolve => {
+            const actions = this._provideCodeActions(text, document, range, context, token);
+            this._map.set(document.uri, { text, actions });
+            resolve(actions);
+        });
+    }
+
+    private _provideCodeActions(text: string, document: vscode.TextDocument, range: vscode.Selection | vscode.Range, context: vscode.CodeActionContext, token: vscode.CancellationToken): vscode.CodeAction[] {
+        if (!text || text.match(_EMOJI_IN_MESSAGE_BOUNDARIES_REGEX)) {
+            this.diagnostics.delete(document.uri);
+            return [];
+        }
+
+        const emojis = suggestEmojiForMessage(text);
+        if (!emojis.length) {
+            this.diagnostics.delete(document.uri);
+            return [];
+        }
+
+        const firstWhitespace = getFirstWhitespaceAfterFirstWord(text);
+        const diagRange = new vscode.Range(new vscode.Position(0, 0), document.positionAt(firstWhitespace !== -1 ? firstWhitespace : text.length));
+        let diags = this.diagnostics.get(document.uri);
+        if (!diags || !diags.length || diags.some(x => !x.range.isEqual(diagRange))) {
+            diags = [new vscode.Diagnostic(diagRange, 'Missing emoji in commit message', vscode.DiagnosticSeverity.Information)];
+            this.diagnostics.set(document.uri, diags);
+        }
+
+        const pickEmojiCodeActionTitle = emojis.length <= _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS
+            ? localize('scminput.quickfix.pick-emoji', "Pick Emoji...")
+            : localize('scminput.quickfix.pick-emoji-with-more-items', "Pick Emoji ({0} More)...", emojis.length - _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS);
+        const pickEmojiCodeAction = new PickEmojiQuickFix(document, pickEmojiCodeActionTitle);
+        pickEmojiCodeAction.isPreferred = true;
+
+        const actions: vscode.CodeAction[] = [pickEmojiCodeAction];
+        for (const x of emojis.slice(0, _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS)) {
+            const action = new vscode.CodeAction(localize('scminput.quickfix.insert-emoji', "Insert Emoji: {0}", x.s), vscode.CodeActionKind.QuickFix);
+            action.edit = new vscode.WorkspaceEdit();
+            action.edit.insert(document.uri, new vscode.Position(0, 0), `${x.s} `);
+            action.diagnostics = [...diags];
+            actions.push(action);
+        }
+        return actions;
+    }
+
+    resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): vscode.ProviderResult<vscode.CodeAction> {
+        const document = (codeAction as PickEmojiQuickFix).document;
+        if (!document) {
+            return;
+        }
+        const text = document.getText();
+        suggest(text.trim(), true, (newText: string) => {
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(document.uri, new vscode.Range(new vscode.Position(0, 0), document.positionAt(text.length)), newText);
+            return vscode.workspace.applyEdit(edit);
+        });
+    }
 }
