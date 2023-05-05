@@ -93,7 +93,6 @@
     },
     "dependencies": {
         "@git-emoji/dataset-js": "^0.0.7",
-        "@vscode/extension-telemetry": "^0.7.7",
         "vscode-nls": "^5.1.0"
     }
 }
