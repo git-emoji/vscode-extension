@@ -42,38 +42,9 @@ export function activate(context: vscode.ExtensionContext) {
         scmInputDiagnostics,
         vscode.languages.registerCodeActionsProvider('scminput', scmInputCodeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
     );
-
-    // const provider = new DummyCompletionItemProvider();
-    // let alphabet = 'abcdefghijklmnopqrstuvwxyz';
-    // const characters = ('0123456789~!@#$%^&*()-_=+{}[]\|\'";:,<.>/?' + alphabet.toLowerCase() + alphabet.toUpperCase()).split('');
-    // context.subscriptions.push(vscode.languages.registerCompletionItemProvider('scminput', provider, ' ', ...characters));
-
 }
 
 export function deactivate() { }
-
-class DummyCompletionItemProvider implements vscode.CompletionItemProvider<vscode.CompletionItem> {
-    provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): vscode.ProviderResult<vscode.CompletionList<vscode.CompletionItem> | vscode.CompletionItem[]> {
-        const text = document.getText();
-        if (!text.trim().length || _EMOJI_IN_MESSAGE_BOUNDARIES_REGEX.test(text)) {
-            return;
-        }
-        const result = new vscode.CompletionItem(
-            {
-                label: 'Missing emoji',
-                description: 'Missing emoji description',
-                detail: 'Missing emoji detail',
-            },
-            vscode.CompletionItemKind.Text,
-        );
-        result.range = new vscode.Range(0, 0, 0, 2);
-        //throw new Error('Method not implemented.');
-        return [result];
-    }
-    resolveCompletionItem?(item: vscode.CompletionItem, token: vscode.CancellationToken): vscode.ProviderResult<vscode.CompletionItem> {
-        throw new Error('Method not implemented.');
-    }
-}
 
 function getIndexedDataset() {
     return current().contextualDataVersion === "v1" ? indexedV1() : indexedV2();
