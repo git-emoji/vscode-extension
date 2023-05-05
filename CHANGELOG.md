@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.8
+
+- Introduce suggestions as commit message input box quick fix (for VS Code v1.78.0 or newer)
+
 ## 0.0.7
 
 - Improve emoji picker
