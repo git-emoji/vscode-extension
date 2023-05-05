@@ -1,12 +1,15 @@
 import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
 
-import { GitExtension } from './git';
-import { indexedV1, indexedV2, Emoji, WordTag } from './dataset';
-import { getFirstWhitespaceAfterFirstWord, normalizeWord } from './util';
 import { current, sync } from './config';
+import { Emoji, WordTag, indexedV1, indexedV2 } from './dataset';
+import { GitExtension } from './git';
+import { getFirstWhitespaceAfterFirstWord, normalizeWord } from './util';
+import TelemetryReporter from '@vscode/extension-telemetry';
 
 const localize = nls.config()();
+
+const _TELEMETRY_KEY = 'c27b4b51-f390-44a7-b330-e523188c22bf';
 
 const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
 const _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS = 250;
@@ -23,11 +26,22 @@ const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG = {
 const _EMOJI_IN_MESSAGE_BOUNDARIES_REGEX = /^\s*\p{Extended_Pictographic}|\p{Extended_Pictographic}\s*$/ugm;
 const _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS = 10;
 
+let _reporter: TelemetryReporter;
+
 export function activate(context: vscode.ExtensionContext) {
+    _reporter = new TelemetryReporter(_TELEMETRY_KEY);
+    context.subscriptions.push(_reporter);
+
     sync();
     const disposables = [
-        vscode.commands.registerCommand('vscode-git-emoji.suggest', () => suggest()),
-        vscode.commands.registerCommand('vscode-git-emoji.list-emojis', () => listEmojis()),
+        vscode.commands.registerCommand('vscode-git-emoji.suggest', () => {
+            _reporter.sendTelemetryEvent('command', { 'name': 'vscode-git-emoji.suggest' });
+            suggest();
+        }),
+        vscode.commands.registerCommand('vscode-git-emoji.list-emojis', () => {
+            _reporter.sendTelemetryEvent('command', { 'name': 'vscode-git-emoji.list-emojis' });
+            listEmojis();
+        }),
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('vscode-git-emoji')) {
                 sync();
