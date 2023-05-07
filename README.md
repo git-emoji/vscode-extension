@@ -18,6 +18,12 @@ For VS Code v1.78.0 (or newer), the extension also suggests you emojis when you 
 
 ![Suggest emoji in git commit message input box](/images/capture-scminput.gif)
 
+## Inline suggestions in commit commit files
+
+You can also get emoji suggestions when you type in your commit message in git commit files. As in the screen capture below, you can then hover over the blue squiggly line and click on *Quick Fix...* (or simply use the <kbd>Ctrl</kbd>+<kbd>.</kbd> keyboard shortcut) to see the suggestions:
+
+![Suggest emoji in git commit files](/images/capture-git-commit.gif)
+
 ## All emojis list
 
 Just:

@@ -20,7 +20,7 @@ const _SUGGESTION_PREVIEW_WEIGHT_WHOLE_WORD_BY_TAG = {
     [_ABBR]: 20,
 };
 
-const _EMOJI_IN_MESSAGE_BOUNDARIES_REGEX = /^\s*\p{Extended_Pictographic}|\p{Extended_Pictographic}\s*$/ugm;
+const _EMOJI_IN_MESSAGE_BOUNDARIES_REGEX = /^\s*\p{Extended_Pictographic}|\p{Extended_Pictographic}\s*\r?$/ug;
 const _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS = 10;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -37,10 +37,10 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(...disposables);
 
     const scmInputDiagnostics = vscode.languages.createDiagnosticCollection('git-emoji:scminput');
-    const scmInputCodeActionProvider = new SCMInputCodeActionProvider(scmInputDiagnostics);
+    const scmInputCodeActionProvider = new GitCommitInputCodeActionProvider(scmInputDiagnostics);
     context.subscriptions.push(
         scmInputDiagnostics,
-        vscode.languages.registerCodeActionsProvider('scminput', scmInputCodeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
+        vscode.languages.registerCodeActionsProvider(['scminput', 'git-commit'], scmInputCodeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
     );
 }
 
@@ -395,13 +395,13 @@ function sortAndJoin(values: string[] | Iterable<string>, separator?: string) {
 }
 
 class PickEmojiQuickFix extends vscode.CodeAction {
-    constructor(readonly document: vscode.TextDocument, title: string) {
+    constructor(readonly document: vscode.TextDocument, readonly firstLine: string, title: string) {
         super(title, vscode.CodeActionKind.QuickFix);
     }
 }
 
-class SCMInputCodeActionProvider implements vscode.CodeActionProvider<vscode.CodeAction> {
-    private _map = new WeakMap<vscode.Uri, { text: string; actions: ReturnType<SCMInputCodeActionProvider['_provideCodeActions']> }>();
+class GitCommitInputCodeActionProvider implements vscode.CodeActionProvider<vscode.CodeAction> {
+    private _map = new WeakMap<vscode.Uri, { text: string; actions: ReturnType<GitCommitInputCodeActionProvider['_provideCodeActions']> }>();
 
     constructor(private readonly diagnostics: vscode.DiagnosticCollection) { }
 
@@ -420,19 +420,21 @@ class SCMInputCodeActionProvider implements vscode.CodeActionProvider<vscode.Cod
     }
 
     private _provideCodeActions(text: string, document: vscode.TextDocument, range: vscode.Selection | vscode.Range, context: vscode.CodeActionContext, token: vscode.CancellationToken): vscode.CodeAction[] {
-        if (!text || text.match(_EMOJI_IN_MESSAGE_BOUNDARIES_REGEX)) {
+        const lines = text.split('\n'); // No need to include `\r`, since it's taken care of in the RegExp.
+        const firstLine = lines[0];
+        if (!firstLine || firstLine.match(_EMOJI_IN_MESSAGE_BOUNDARIES_REGEX)) {
             this.diagnostics.delete(document.uri);
             return [];
         }
 
-        const emojis = suggestEmojiForMessage(text);
+        const emojis = suggestEmojiForMessage(firstLine);
         if (!emojis.length) {
             this.diagnostics.delete(document.uri);
             return [];
         }
 
-        const firstWhitespace = getFirstWhitespaceAfterFirstWord(text);
-        const diagRange = new vscode.Range(new vscode.Position(0, 0), document.positionAt(firstWhitespace !== -1 ? firstWhitespace : text.length));
+        const firstWhitespace = getFirstWhitespaceAfterFirstWord(firstLine);
+        const diagRange = new vscode.Range(new vscode.Position(0, 0), document.positionAt(firstWhitespace !== -1 ? firstWhitespace : firstLine.length));
         let diags = this.diagnostics.get(document.uri);
         if (!diags || !diags.length || diags.some(x => !x.range.isEqual(diagRange))) {
             diags = [new vscode.Diagnostic(diagRange, 'Missing emoji in commit message', vscode.DiagnosticSeverity.Information)];
@@ -440,14 +442,14 @@ class SCMInputCodeActionProvider implements vscode.CodeActionProvider<vscode.Cod
         }
 
         const pickEmojiCodeActionTitle = emojis.length <= _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS
-            ? localize('scminput.quickfix.pick-emoji', "Pick Emoji...")
-            : localize('scminput.quickfix.pick-emoji-with-more-items', "Pick Emoji ({0} More)...", emojis.length - _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS);
-        const pickEmojiCodeAction = new PickEmojiQuickFix(document, pickEmojiCodeActionTitle);
+            ? localize('git-commit.quickfix.pick-emoji', "Pick Emoji...")
+            : localize('git-commit.quickfix.pick-emoji-with-more-items', "Pick Emoji ({0} More)...", emojis.length - _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS);
+        const pickEmojiCodeAction = new PickEmojiQuickFix(document, firstLine, pickEmojiCodeActionTitle);
         pickEmojiCodeAction.isPreferred = true;
 
         const actions: vscode.CodeAction[] = [pickEmojiCodeAction];
         for (const x of emojis.slice(0, _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS)) {
-            const action = new vscode.CodeAction(localize('scminput.quickfix.insert-emoji', "Insert Emoji: {0}", x.s), vscode.CodeActionKind.QuickFix);
+            const action = new vscode.CodeAction(localize('git-commit.quickfix.insert-emoji', "Insert Emoji: {0}", x.s), vscode.CodeActionKind.QuickFix);
             action.edit = new vscode.WorkspaceEdit();
             action.edit.insert(document.uri, new vscode.Position(0, 0), `${x.s} `);
             action.diagnostics = [...diags];
@@ -457,14 +459,13 @@ class SCMInputCodeActionProvider implements vscode.CodeActionProvider<vscode.Cod
     }
 
     resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): vscode.ProviderResult<vscode.CodeAction> {
-        const document = (codeAction as PickEmojiQuickFix).document;
-        if (!document) {
+        const action = codeAction as PickEmojiQuickFix;
+        if (!action.document) {
             return;
         }
-        const text = document.getText();
-        suggest(text.trim(), true, (newText: string) => {
+        suggest(action.firstLine.trim(), true, (newText: string) => {
             const edit = new vscode.WorkspaceEdit();
-            edit.replace(document.uri, new vscode.Range(new vscode.Position(0, 0), document.positionAt(text.length)), newText);
+            edit.replace(action.document.uri, new vscode.Range(new vscode.Position(0, 0), action.document.positionAt(action.firstLine.length)), newText);
             return vscode.workspace.applyEdit(edit);
         });
     }

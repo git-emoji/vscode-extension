@@ -1,9 +1,12 @@
 # Change Log
 
+## 0.0.9
+
+- Introduce suggestions in git commit files
+
 ## 0.0.8
 
 - Introduce suggestions as commit message input box quick fix (for VS Code v1.78.0 or newer)
-- Add basic telemetry
 
 ## 0.0.7
 
