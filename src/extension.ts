@@ -1,5 +1,6 @@
 import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
+import TelemetryReporter from '@vscode/extension-telemetry';
 
 import { current, sync } from './config';
 import { Emoji, WordTag, indexedV1, indexedV2 } from './dataset';
@@ -7,6 +8,9 @@ import { GitExtension } from './git';
 import { getFirstWhitespaceAfterFirstWord, normalizeWord } from './util';
 
 const localize = nls.config()();
+
+const _TELEMETRY_INSTRUMENTATION_KEY = 'c27b4b51-f390-44a7-b330-e523188c22bf';
+let _reporter: TelemetryReporter;
 
 const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
 const _SUGGESTION_PREVIEW_REFRESH_INTERVAL_MS = 250;
@@ -24,10 +28,18 @@ const _EMOJI_IN_MESSAGE_BOUNDARIES_REGEX = /^\s*\p{Extended_Pictographic}|\p{Ext
 const _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS = 10;
 
 export function activate(context: vscode.ExtensionContext) {
+    _reporter = new TelemetryReporter(_TELEMETRY_INSTRUMENTATION_KEY);
+
     sync();
     const disposables = [
-        vscode.commands.registerCommand('vscode-git-emoji.suggest', () => suggest()),
-        vscode.commands.registerCommand('vscode-git-emoji.list-emojis', () => listEmojis()),
+        vscode.commands.registerCommand('vscode-git-emoji.suggest', () => {
+            _reporter.sendTelemetryEvent('command', { name: 'suggest' });
+            suggest();
+        }),
+        vscode.commands.registerCommand('vscode-git-emoji.list-emojis', () => {
+            _reporter.sendTelemetryEvent('command', { name: 'list-emojis' });
+            listEmojis();
+        }),
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('vscode-git-emoji')) {
                 sync();
@@ -53,7 +65,7 @@ function getIndexedDataset() {
 let _lastIncompleteMessage: string | undefined = undefined;
 
 async function suggest(overrideSeed?: string | undefined, skipUserInput?: boolean | undefined, overrideEmit?: EmitAction | undefined) {
-    const seed = overrideSeed !== undefined ? overrideSeed : _lastIncompleteMessage || readActiveTextEditorSelection() || readCommitMessageInputBox();
+    const seed = overrideSeed !== undefined ? overrideSeed : readLastIncompleteMessage() || readActiveTextEditorSelection() || readCommitMessageInputBox();
     const commitMessage = skipUserInput ? seed : await readCommitMessage(seed);
     if (!commitMessage) {
         return;
@@ -107,9 +119,20 @@ async function emit(action: EmitAction, value: string) {
     }
 }
 
+function readLastIncompleteMessage(): string | undefined {
+    if (_lastIncompleteMessage) {
+        _reporter.sendTelemetryEvent('read', { source: 'last-incomplete-message' });
+    }
+    return _lastIncompleteMessage;
+}
+
 function readActiveTextEditorSelection(): string | undefined {
     const ate = vscode.window.activeTextEditor;
-    return ate?.selection ? ate.document.getText(ate.selection) : undefined;
+    const result = ate?.selection ? ate.document.getText(ate.selection) : undefined;
+    if (result) {
+        _reporter.sendTelemetryEvent('read', { source: 'active-text-editor' });
+    }
+    return result;
 }
 
 function readCommitMessageInputBox(): string | undefined {
@@ -120,6 +143,7 @@ function readCommitMessageInputBox(): string | undefined {
     const git = gitExtension.getAPI(1);
     for (const repo of git.repositories) {
         if (repo.inputBox.value) {
+            _reporter.sendTelemetryEvent('read', { source: 'scminput' });
             return repo.inputBox.value;
         }
     }
@@ -132,6 +156,7 @@ function emitToCommitMessageInputBox(text: string) {
     }
     const git = gitExtension.getAPI(1);
     if (git.repositories.length) {
+        _reporter.sendTelemetryEvent('emit', { destination: 'scminput' });
         git.repositories[0].inputBox.value = text;
     }
 }
@@ -142,9 +167,13 @@ async function readCommitMessage(seed?: string): Promise<string | undefined> {
         const box = vscode.window.createInputBox();
         const suggestOnValue = (value: string) => {
             const emojis = suggestEmojiForMessage(value);
-            return emojis.length
+            const result = emojis.length
                 ? emojis.slice(0, MAX).map(x => x.s).join('') + (emojis.length <= MAX ? '' : ' ' + localize('plus_more_emojis', "+{0}", emojis.length - MAX))
                 : '';
+            if (result) {
+                _reporter.sendTelemetryEvent('read', { source: 'input' });
+            }
+            return result;
         };
         const intervalId = setInterval(() => {
             const value = box.value;
@@ -318,16 +347,19 @@ async function pickEmitAction(): Promise<undefined | EmitAction> {
 }
 
 function emitToTerminal(text: string) {
+    _reporter.sendTelemetryEvent('emit', { destination: 'terminal' });
     const terminal = vscode.window.activeTerminal || vscode.window.createTerminal();
     terminal.sendText(text, false);
     terminal.show();
 }
 
 async function emitToNewDocument(text: string) {
+    _reporter.sendTelemetryEvent('emit', { destination: 'new-document' });
     await vscode.workspace.openTextDocument({ content: text });
 }
 
 function emitToClipboard(text: string) {
+    _reporter.sendTelemetryEvent('emit', { destination: 'clipboard' });
     vscode.env.clipboard.writeText(text);
     vscode.window.showInformationMessage(localize('emit-to-clipboard-done', 'Copied: {0}', text));
 }
@@ -394,18 +426,44 @@ function sortAndJoin(values: string[] | Iterable<string>, separator?: string) {
     return v.join(separator);
 }
 
-class PickEmojiQuickFix extends vscode.CodeAction {
-    constructor(readonly document: vscode.TextDocument, readonly firstLine: string, title: string) {
+abstract class CustomQuickFix extends vscode.CodeAction {
+    abstract apply(): void;
+}
+
+class InsertEmojiQuickFix extends CustomQuickFix {
+    constructor(readonly document: vscode.TextDocument, readonly emoji: string, title: string) {
         super(title, vscode.CodeActionKind.QuickFix);
+    }
+
+    apply(): void {
+        _reporter.sendTelemetryEvent('quickfix', { type: 'insert' });
+        const edit = new vscode.WorkspaceEdit();
+        edit.insert(this.document.uri, new vscode.Position(0, 0), `${this.emoji} `);
+        vscode.workspace.applyEdit(edit);
     }
 }
 
-class GitCommitInputCodeActionProvider implements vscode.CodeActionProvider<vscode.CodeAction> {
+class PickEmojiQuickFix extends CustomQuickFix {
+    constructor(readonly document: vscode.TextDocument, readonly firstLine: string, title: string) {
+        super(title, vscode.CodeActionKind.QuickFix);
+    }
+
+    apply(): void {
+        _reporter.sendTelemetryEvent('quickfix', { type: 'pick' });
+        suggest(this.firstLine.trim(), true, (newText: string) => {
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(this.document.uri, new vscode.Range(new vscode.Position(0, 0), this.document.positionAt(this.firstLine.length)), newText);
+            return vscode.workspace.applyEdit(edit);
+        });
+    }
+}
+
+class GitCommitInputCodeActionProvider implements vscode.CodeActionProvider<CustomQuickFix> {
     private _map = new WeakMap<vscode.Uri, { text: string; actions: ReturnType<GitCommitInputCodeActionProvider['_provideCodeActions']> }>();
 
     constructor(private readonly diagnostics: vscode.DiagnosticCollection) { }
 
-    async provideCodeActions(document: vscode.TextDocument, range: vscode.Selection | vscode.Range, context: vscode.CodeActionContext, token: vscode.CancellationToken): Promise<vscode.CodeAction[]> {
+    async provideCodeActions(document: vscode.TextDocument, range: vscode.Selection | vscode.Range, context: vscode.CodeActionContext, token: vscode.CancellationToken): Promise<CustomQuickFix[]> {
         const text = document.getText();
         const lastOp = this._map.get(document.uri);
         if (lastOp?.text === text) {
@@ -419,7 +477,7 @@ class GitCommitInputCodeActionProvider implements vscode.CodeActionProvider<vsco
         });
     }
 
-    private _provideCodeActions(text: string, document: vscode.TextDocument, range: vscode.Selection | vscode.Range, context: vscode.CodeActionContext, token: vscode.CancellationToken): vscode.CodeAction[] {
+    private _provideCodeActions(text: string, document: vscode.TextDocument, range: vscode.Selection | vscode.Range, context: vscode.CodeActionContext, token: vscode.CancellationToken): CustomQuickFix[] {
         const lines = text.split('\n'); // No need to include `\r`, since it's taken care of in the RegExp.
         const firstLine = lines[0];
         if (!firstLine || firstLine.match(_EMOJI_IN_MESSAGE_BOUNDARIES_REGEX)) {
@@ -447,26 +505,17 @@ class GitCommitInputCodeActionProvider implements vscode.CodeActionProvider<vsco
         const pickEmojiCodeAction = new PickEmojiQuickFix(document, firstLine, pickEmojiCodeActionTitle);
         pickEmojiCodeAction.isPreferred = true;
 
-        const actions: vscode.CodeAction[] = [pickEmojiCodeAction];
+        const actions: CustomQuickFix[] = [pickEmojiCodeAction];
         for (const x of emojis.slice(0, _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS)) {
-            const action = new vscode.CodeAction(localize('git-commit.quickfix.insert-emoji', "Insert Emoji: {0}", x.s), vscode.CodeActionKind.QuickFix);
-            action.edit = new vscode.WorkspaceEdit();
-            action.edit.insert(document.uri, new vscode.Position(0, 0), `${x.s} `);
+            const action = new InsertEmojiQuickFix(document, x.s, localize('git-commit.quickfix.insert-emoji', "Insert Emoji: {0}", x.s));
             action.diagnostics = [...diags];
             actions.push(action);
         }
         return actions;
     }
 
-    resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): vscode.ProviderResult<vscode.CodeAction> {
-        const action = codeAction as PickEmojiQuickFix;
-        if (!action.document) {
-            return;
-        }
-        suggest(action.firstLine.trim(), true, (newText: string) => {
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(action.document.uri, new vscode.Range(new vscode.Position(0, 0), action.document.positionAt(action.firstLine.length)), newText);
-            return vscode.workspace.applyEdit(edit);
-        });
+    resolveCodeAction(codeAction: CustomQuickFix, token: vscode.CancellationToken): vscode.ProviderResult<CustomQuickFix> {
+        codeAction.apply();
+        return;
     }
 }

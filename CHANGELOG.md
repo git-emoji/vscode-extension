@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.10
+
+- Enable basic telemetry
+
 ## 0.0.9
 
 - Introduce suggestions in git commit files
