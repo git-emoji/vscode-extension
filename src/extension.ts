@@ -169,13 +169,9 @@ async function readCommitMessage(seed?: string): Promise<string | undefined> {
         const box = vscode.window.createInputBox();
         const suggestOnValue = (value: string) => {
             const emojis = suggestEmojiForMessage(value);
-            const result = emojis.length
+            return emojis.length
                 ? emojis.slice(0, MAX).map(x => x.s).join('') + (emojis.length <= MAX ? '' : ' ' + localize('plus_more_emojis', "+{0}", emojis.length - MAX))
                 : '';
-            if (result) {
-                _reporter.sendTelemetryEvent('read.input');
-            }
-            return result;
         };
         const intervalId = setInterval(() => {
             const value = box.value;
@@ -197,6 +193,9 @@ async function readCommitMessage(seed?: string): Promise<string | undefined> {
             accepted = true;
             const result = box.value;
             dispose();
+            if (result) {
+                _reporter.sendTelemetryEvent('read.input');
+            }
             resolve(result);
         });
         box.onDidHide(e => {

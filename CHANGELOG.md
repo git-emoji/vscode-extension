@@ -1,6 +1,10 @@
 # Change Log
 
-## 0.0.11
+## 0.0.12
+
+- Fix metric report
+
+- ## 0.0.11
 
 - Improve metrics
 
