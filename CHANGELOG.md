@@ -2,6 +2,7 @@
 
 ## 0.0.12
 
+- Introduce emit to active document
 - Fix metric report
 
 - ## 0.0.11
