@@ -7,7 +7,7 @@
         "type": "git",
         "url": "https://github.com/git-emoji/vscode-extension"
     },
-    "version": "0.0.12",
+    "version": "0.0.13",
     "engines": {
         "vscode": "^1.64.0"
     },
@@ -92,7 +92,7 @@
         "vscode-nls-dev": "^4.0.1"
     },
     "dependencies": {
-        "@git-emoji/dataset-js": "^0.0.7",
+        "@git-emoji/dataset-js": "^0.0.10",
         "@vscode/extension-telemetry": "^0.7.7",
         "vscode-nls": "^5.1.0"
     }
