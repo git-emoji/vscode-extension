@@ -108,6 +108,9 @@ async function emit(action: EmitAction, value: string) {
         case 'type-in-new-document':
             await emitToNewDocument(value);
             break;
+        case 'type-in-active-document':
+            await emitToActiveDocument(value);
+            break;
         case 'copy':
             emitToClipboard(value);
             break;
@@ -313,7 +316,7 @@ async function pickConcatStyle(emojis: Emoji[], message: string): Promise<string
     ))?.detail;
 }
 
-type EmitAction = 'copy' | 'type-in-terminal' | 'type-in-git-input-box' | 'type-in-new-document' | ((message: string) => void);
+type EmitAction = 'copy' | 'type-in-terminal' | 'type-in-git-input-box' | 'type-in-new-document' | 'type-in-active-document' | ((message: string) => void);
 
 function concatEmojis(emojis: Emoji[]) {
     return emojis.map(x => x.s).join('');
@@ -339,6 +342,10 @@ async function pickEmitAction(): Promise<undefined | EmitAction> {
                 label: localize('pick-emit-action-type-in-new-document', "Type in new document"),
                 action: 'type-in-new-document',
             },
+            {
+                label: localize('pick-emit-action-type-in-active-document', "Type in active document"),
+                action: 'type-in-active-document',
+            },
         ],
         {
             ignoreFocusOut: true,
@@ -357,6 +364,17 @@ function emitToTerminal(text: string) {
 async function emitToNewDocument(text: string) {
     _reporter.sendTelemetryEvent('emit.newDocument');
     await vscode.workspace.openTextDocument({ content: text });
+}
+
+async function emitToActiveDocument(text: string) {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        return emitToNewDocument(text);
+    }
+    await editor.edit(builder => {
+        _reporter.sendTelemetryEvent('emit.activeDocument');
+        builder.replace(editor.selection, text);
+    });
 }
 
 function emitToClipboard(text: string) {
