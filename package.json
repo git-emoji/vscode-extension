@@ -7,7 +7,7 @@
         "type": "git",
         "url": "https://github.com/git-emoji/vscode-extension"
     },
-    "version": "0.0.15",
+    "version": "0.0.16",
     "engines": {
         "vscode": "^1.64.0"
     },
@@ -19,6 +19,8 @@
     ],
     "activationEvents": [
         "onStartup",
+        "onLanguage:scminput",
+        "onLanguage:git-commit",
         "onCommand:vscode-git-emoji.suggest",
         "onCommand:vscode-git-emoji.list-emojis"
     ],
