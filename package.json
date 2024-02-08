@@ -19,6 +19,8 @@
     ],
     "activationEvents": [
         "onStartup",
+        "onLanguage:scminput",
+        "onLanguage:git-commit",
         "onCommand:vscode-git-emoji.suggest",
         "onCommand:vscode-git-emoji.list-emojis"
     ],
