@@ -9,7 +9,7 @@ import { getFirstWhitespaceAfterFirstWord, normalizeWord } from './util';
 
 const localize = nls.config()();
 
-const _TELEMETRY_INSTRUMENTATION_KEY = 'c27b4b51-f390-44a7-b330-e523188c22bf';
+const _TELEMETRY_CONNECTION_STRING = 'InstrumentationKey=c27b4b51-f390-44a7-b330-e523188c22bf;IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;ApplicationId=d6489f95-cbd5-4b65-bed1-5005dbce9980';
 let _reporter: TelemetryReporter;
 
 const _SUGGESTION_PREVIEW_MAX_EMOJI_COUNT = 10;
@@ -29,7 +29,7 @@ const _MAX_SCMINPUT_QUICKFIX_EMOJI_SUGGESTIONS = 10;
 
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
-        _reporter = new TelemetryReporter(_TELEMETRY_INSTRUMENTATION_KEY)
+        _reporter = new TelemetryReporter(context.extensionMode === vscode.ExtensionMode.Production ? _TELEMETRY_CONNECTION_STRING : '' )
     );
 
     sync();
